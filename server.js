@@ -101,13 +101,7 @@ io.on("connection", (socket) => {
   socket.emit("chat:history", messages);
   broadcastUsers();
 
-  socket.on("user:setName", (rawName) => {
-    const clean = String(rawName || "").trim().slice(0, 24);
-    if (!clean) return;
-    socket.data.name = clean;
-    socket.emit("user:nameConfirmed", clean);
-    broadcastUsers();
-  });
+  // Custom naming disabled; users remain Guest_<id>
 
   socket.on("admin:login", (secret) => {
     if (String(secret) === ADMIN_SECRET) {

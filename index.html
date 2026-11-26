@@ -68,10 +68,10 @@
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
     }
 
-    .name-box, .theme-box { display: flex; gap: 6px; align-items: center; }
+    .theme-box { display: flex; gap: 6px; align-items: center; }
 
     input, select, button {
       border-radius: 10px;
@@ -117,9 +117,9 @@
     }
 
     .msg.mine {
-      align-self: flex-end;
-      background: rgba(99, 102, 241, 0.28);
-      border-color: rgba(129, 140, 248, 0.45);
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--border);
     }
 
     .msg-meta {
@@ -200,11 +200,6 @@
   <div class="app">
     <div class="chat-panel">
       <div class="topbar">
-        <div class="name-box">
-          <input id="nameInput" type="text" placeholder="Your display name..." maxlength="24" />
-          <button id="saveNameBtn">Set Name</button>
-        </div>
-
         <div class="theme-box">
           <select id="themeSelect" title="Background Theme">
             <option value="">Indigo Night</option>
@@ -283,20 +278,6 @@
       document.body.classList.remove("theme-sunset", "theme-emerald", "theme-aurora");
       if (themeSelect.value) document.body.classList.add(themeSelect.value);
       localStorage.setItem("chatTheme", themeSelect.value);
-    };
-
-    const nameInput = document.getElementById("nameInput");
-    const savedName = localStorage.getItem("chatName");
-    if (savedName) {
-      nameInput.value = savedName;
-      socket.emit("user:setName", savedName);
-    }
-
-    document.getElementById("saveNameBtn").onclick = () => {
-      const val = nameInput.value.trim();
-      if (!val) return;
-      localStorage.setItem("chatName", val);
-      socket.emit("user:setName", val);
     };
 
     document.getElementById("chatForm").onsubmit = (e) => {
