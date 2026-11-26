@@ -20,6 +20,7 @@ app.get("/", (req, res) => {
 });
 
 let messages = []; // { id, sender, text, time, socketId }
+let chatClosed = false;
 const blockedIPs = new Set();
 const blockedSocketIds = new Set();
 
@@ -31,6 +32,9 @@ function loadData() {
     if (Array.isArray(raw.messages)) messages = raw.messages.slice(-300);
     if (Array.isArray(raw.blockedIPs)) {
       raw.blockedIPs.forEach((ip) => blockedIPs.add(ip));
+    }
+    if (typeof raw.chatClosed === "boolean") {
+      chatClosed = raw.chatClosed;
     }
   } catch (err) {
     console.error("Failed to load chat-data.json:", err.message);
@@ -46,6 +50,7 @@ function saveData() {
         {
           messages,
           blockedIPs: [...blockedIPs],
+          chatClosed,
         },
         null,
         2
@@ -98,16 +103,16 @@ io.on("connection", (socket) => {
     return;
   }
 
+  socket.emit("chat:roomState", { closed: chatClosed });
   socket.emit("chat:history", messages);
   broadcastUsers();
-
-  // Custom naming disabled; users remain Guest_<id>
 
   socket.on("admin:login", (secret) => {
     if (String(secret) === ADMIN_SECRET) {
       socket.data.isAdmin = true;
       socket.join("admins");
       socket.emit("admin:auth", { ok: true });
+      socket.emit("chat:roomState", { closed: chatClosed });
       socket.emit("admin:users", getUsersSnapshot(true));
       socket.emit("chat:history", messages);
     } else {
@@ -115,7 +120,15 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("admin:setChatClosed", (shouldClose) => {
+    if (!socket.data.isAdmin) return;
+    chatClosed = Boolean(shouldClose);
+    saveData();
+    io.emit("chat:roomState", { closed: chatClosed });
+  });
+
   socket.on("chat:typing", (isTyping) => {
+    if (chatClosed && !socket.data.isAdmin) return;
     if (blockedSocketIds.has(socket.id) || blockedIPs.has(ip)) return;
     socket.broadcast.emit("chat:typing", {
       name: socket.data.name,
@@ -126,6 +139,11 @@ io.on("connection", (socket) => {
   socket.on("chat:message", (rawText) => {
     if (blockedSocketIds.has(socket.id) || blockedIPs.has(ip)) {
       socket.emit("system:blocked", "You are blocked from sending messages.");
+      return;
+    }
+
+    if (chatClosed && !socket.data.isAdmin) {
+      socket.emit("chat:error", "The chat is currently closed by the admin.");
       return;
     }
 

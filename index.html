@@ -14,6 +14,7 @@
       --accent: #6366f1;
       --accent-hover: #4f46e5;
       --danger: #ef4444;
+      --success: #10b981;
     }
 
     body.theme-sunset {
@@ -83,6 +84,11 @@
       outline: none;
     }
 
+    input:disabled, button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     select option { background: #1e293b; color: #f8fafc; }
 
     button {
@@ -93,10 +99,26 @@
       transition: background 0.2s, transform 0.1s;
     }
 
-    button:hover { background: var(--accent-hover); }
-    button:active { transform: scale(0.98); }
+    button:hover:not(:disabled) { background: var(--accent-hover); }
+    button:active:not(:disabled) { transform: scale(0.98); }
     button.danger { background: var(--danger); padding: 4px 8px; font-size: 12px; }
+    button.success { background: var(--success); }
     button.ghost { background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border); }
+
+    .closed-banner {
+      display: none;
+      padding: 10px 16px;
+      background: rgba(239, 68, 68, 0.2);
+      border-bottom: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .closed-banner.active {
+      display: block;
+    }
 
     .messages {
       flex: 1;
@@ -158,7 +180,7 @@
       border-radius: 8px;
     }
 
-    .emoji-btn:hover { background: rgba(255, 255, 255, 0.12); }
+    .emoji-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
 
     .composer {
       padding: 12px 14px;
@@ -210,6 +232,10 @@
         </div>
       </div>
 
+      <div id="closedBanner" class="closed-banner">
+        Chat is currently closed by the admin.
+      </div>
+
       <div id="messages" class="messages"></div>
       <div id="typing" class="typing"></div>
 
@@ -217,7 +243,7 @@
 
       <form id="chatForm" class="composer">
         <input id="msgInput" type="text" placeholder="Type a message..." autocomplete="off" />
-        <button type="submit">Send</button>
+        <button id="sendBtn" type="submit">Send</button>
       </form>
     </div>
 
@@ -235,6 +261,7 @@
         </div>
 
         <div id="adminControls" class="admin-controls">
+          <button id="toggleChatBtn" class="danger" style="padding:8px;">Close Chat</button>
           <button id="clearHistoryBtn" class="danger" style="padding:8px;">Refresh / Clear Chat</button>
           <span style="font-size:12px; color:var(--muted);">Click "Delete" on any message or "Block" next to a user.</span>
         </div>
@@ -248,11 +275,15 @@
       transports: ["websocket"],
     });
     let isAdmin = false;
+    let isChatClosed = false;
     let currentUsers = [];
 
     const emojis = ["😀","😂","😍","🔥","👍","🎉","🤔","😭","🚀","❤️","✨","🙌"];
     const emojiBar = document.getElementById("emojiBar");
     const msgInput = document.getElementById("msgInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const closedBanner = document.getElementById("closedBanner");
+    const toggleChatBtn = document.getElementById("toggleChatBtn");
     const messagesEl = document.getElementById("messages");
     const typingEl = document.getElementById("typing");
 
@@ -262,11 +293,36 @@
       btn.className = "emoji-btn";
       btn.textContent = em;
       btn.onclick = () => {
+        if (msgInput.disabled) return;
         msgInput.value += em;
         msgInput.focus();
       };
       emojiBar.appendChild(btn);
     });
+
+    function applyRoomState() {
+      const lockedForUser = isChatClosed && !isAdmin;
+      closedBanner.classList.toggle("active", isChatClosed);
+      msgInput.disabled = lockedForUser;
+      sendBtn.disabled = lockedForUser;
+      msgInput.placeholder = lockedForUser
+        ? "Chat is closed by admin..."
+        : "Type a message...";
+
+      document.querySelectorAll(".emoji-btn").forEach((b) => {
+        b.disabled = lockedForUser;
+      });
+
+      if (isChatClosed) {
+        toggleChatBtn.textContent = "Reopen Chat";
+        toggleChatBtn.classList.remove("danger");
+        toggleChatBtn.classList.add("success");
+      } else {
+        toggleChatBtn.textContent = "Close Chat";
+        toggleChatBtn.classList.remove("success");
+        toggleChatBtn.classList.add("danger");
+      }
+    }
 
     const themeSelect = document.getElementById("themeSelect");
     const savedTheme = localStorage.getItem("chatTheme") || "";
@@ -282,6 +338,7 @@
 
     document.getElementById("chatForm").onsubmit = (e) => {
       e.preventDefault();
+      if (isChatClosed && !isAdmin) return;
       const text = msgInput.value.trim();
       if (!text) return;
       socket.emit("chat:message", text);
@@ -291,6 +348,7 @@
 
     let typingTimeout;
     msgInput.addEventListener("input", () => {
+      if (isChatClosed && !isAdmin) return;
       socket.emit("chat:typing", true);
       clearTimeout(typingTimeout);
       typingTimeout = setTimeout(() => socket.emit("chat:typing", false), 1200);
@@ -326,6 +384,15 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       }[c]));
     }
+
+    socket.on("chat:roomState", ({ closed }) => {
+      isChatClosed = Boolean(closed);
+      applyRoomState();
+    });
+
+    socket.on("chat:error", (msg) => {
+      alert(msg);
+    });
 
     socket.on("chat:history", (list) => {
       messagesEl.innerHTML = "";
@@ -383,8 +450,13 @@
       isAdmin = true;
       document.getElementById("adminLoginRow").style.display = "none";
       document.getElementById("adminControls").classList.add("active");
+      applyRoomState();
       renderUsers(currentUsers);
     });
+
+    toggleChatBtn.onclick = () => {
+      socket.emit("admin:setChatClosed", !isChatClosed);
+    };
 
     document.getElementById("clearHistoryBtn").onclick = () => {
       if (confirm("Clear chat history for everyone?")) {
