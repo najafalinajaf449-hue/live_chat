@@ -249,7 +249,9 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
+    const socket = io({
+      transports: ["websocket"],
+    });
     let isAdmin = false;
     let currentUsers = [];
 
@@ -271,7 +273,6 @@
       emojiBar.appendChild(btn);
     });
 
-    // Background theme switcher
     const themeSelect = document.getElementById("themeSelect");
     const savedTheme = localStorage.getItem("chatTheme") || "";
     if (savedTheme) {
@@ -284,7 +285,6 @@
       localStorage.setItem("chatTheme", themeSelect.value);
     };
 
-    // Custom display name
     const nameInput = document.getElementById("nameInput");
     const savedName = localStorage.getItem("chatName");
     if (savedName) {
@@ -299,7 +299,6 @@
       socket.emit("user:setName", val);
     };
 
-    // Send message
     document.getElementById("chatForm").onsubmit = (e) => {
       e.preventDefault();
       const text = msgInput.value.trim();
@@ -309,7 +308,6 @@
       socket.emit("chat:typing", false);
     };
 
-    // Typing indicator
     let typingTimeout;
     msgInput.addEventListener("input", () => {
       socket.emit("chat:typing", true);
@@ -395,7 +393,6 @@
 
     socket.on("users:list", renderUsers);
 
-    // Admin login & actions
     document.getElementById("adminLoginBtn").onclick = () => {
       socket.emit("admin:login", document.getElementById("adminKeyInput").value);
     };
@@ -406,8 +403,6 @@
       document.getElementById("adminLoginRow").style.display = "none";
       document.getElementById("adminControls").classList.add("active");
       renderUsers(currentUsers);
-      // Reload history so delete buttons appear on existing messages
-      socket.emit("admin:refreshView");
     });
 
     document.getElementById("clearHistoryBtn").onclick = () => {

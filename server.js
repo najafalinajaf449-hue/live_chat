@@ -12,7 +12,9 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "iamnajaf321";
 const DATA_FILE = path.join(__dirname, "chat-data.json");
 
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, "public")));
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -22,6 +24,7 @@ const blockedIPs = new Set();
 const blockedSocketIds = new Set();
 
 function loadData() {
+  if (process.env.VERCEL) return;
   try {
     if (!fs.existsSync(DATA_FILE)) return;
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
@@ -35,6 +38,7 @@ function loadData() {
 }
 
 function saveData() {
+  if (process.env.VERCEL) return;
   try {
     fs.writeFileSync(
       DATA_FILE,
@@ -94,11 +98,9 @@ io.on("connection", (socket) => {
     return;
   }
 
-  // Send current chat history to newly connected user
   socket.emit("chat:history", messages);
   broadcastUsers();
 
-  // Set or update custom display name
   socket.on("user:setName", (rawName) => {
     const clean = String(rawName || "").trim().slice(0, 24);
     if (!clean) return;
@@ -107,7 +109,6 @@ io.on("connection", (socket) => {
     broadcastUsers();
   });
 
-  // Admin login
   socket.on("admin:login", (secret) => {
     if (String(secret) === ADMIN_SECRET) {
       socket.data.isAdmin = true;
@@ -120,7 +121,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Typing indicator
   socket.on("chat:typing", (isTyping) => {
     if (blockedSocketIds.has(socket.id) || blockedIPs.has(ip)) return;
     socket.broadcast.emit("chat:typing", {
@@ -129,7 +129,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // New chat message
   socket.on("chat:message", (rawText) => {
     if (blockedSocketIds.has(socket.id) || blockedIPs.has(ip)) {
       socket.emit("system:blocked", "You are blocked from sending messages.");
@@ -154,7 +153,6 @@ io.on("connection", (socket) => {
     io.emit("chat:message", msg);
   });
 
-  // ADMIN: Delete a specific message
   socket.on("admin:deleteMessage", (msgId) => {
     if (!socket.data.isAdmin) return;
     messages = messages.filter((m) => m.id !== msgId);
@@ -162,7 +160,6 @@ io.on("connection", (socket) => {
     io.emit("chat:deleteMessage", msgId);
   });
 
-  // ADMIN: Refresh / clear chat history
   socket.on("admin:clearHistory", () => {
     if (!socket.data.isAdmin) return;
     messages = [];
@@ -170,7 +167,6 @@ io.on("connection", (socket) => {
     io.emit("chat:history", []);
   });
 
-  // ADMIN: Block a user by socketId & IP
   socket.on("admin:blockUser", (targetSocketId) => {
     if (!socket.data.isAdmin) return;
     const target = io.sockets.sockets.get(targetSocketId);
@@ -190,6 +186,10 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Chat server running at http://localhost:${PORT}`);
-});
+module.exports = server;
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Chat server running at http://localhost:${PORT}`);
+  });
+}
