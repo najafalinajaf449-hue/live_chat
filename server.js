@@ -13,6 +13,9 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || "iamnajaf321";
 const DATA_FILE = path.join(__dirname, "chat-data.json");
 
 app.use(express.static(path.join(__dirname)));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 let messages = []; // { id, sender, text, time, socketId }
 const blockedIPs = new Set();
